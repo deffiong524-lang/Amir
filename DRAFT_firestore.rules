@@ -1,0 +1,293 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // Zero-lookup admin check safe for list queries (Pillar 8 Cost-Optimization)
+    function isChiefAdminEmail() {
+      return isSignedIn() && request.auth.token.email == 'deffiong524@gmail.com';
+    }
+
+    // Single-document RBAC check including Authorized Personnel registry lookup
+    function isAdmin() {
+      return isChiefAdminEmail() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/authorized_personnel/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint: ConsentRecord
+    function isValidConsentRecord(data) {
+      return data.keys().hasAll([
+        'patientUid',
+        'policyVersion',
+        'consentGranted',
+        'allowProcessing',
+        'forbidAiTraining',
+        'acknowledgesNoDiagnosis',
+        'signatureHash',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'patientUid',
+        'policyVersion',
+        'consentGranted',
+        'allowProcessing',
+        'forbidAiTraining',
+        'acknowledgesNoDiagnosis',
+        'signatureHash',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.patientUid is string && data.patientUid.size() >= 1 && data.patientUid.size() <= 128 &&
+      data.patientUid == request.auth.uid &&
+      data.policyVersion is string && data.policyVersion.size() >= 1 && data.policyVersion.size() <= 32 &&
+      data.consentGranted is bool &&
+      data.allowProcessing is bool &&
+      data.forbidAiTraining is bool && data.forbidAiTraining == true &&
+      data.acknowledgesNoDiagnosis is bool && data.acknowledgesNoDiagnosis == true &&
+      data.signatureHash is string && data.signatureHash.size() >= 16 && data.signatureHash.size() <= 128 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: EncryptedPatientImage
+    function isValidEncryptedPatientImage(data) {
+      return data.keys().hasAll([
+        'ownerUid',
+        'consentId',
+        'caseTitle',
+        'category',
+        'viewLabel',
+        'dayLabel',
+        'cipherAlgorithm',
+        'ivBase64',
+        'ciphertextBase64',
+        'sha256Digest',
+        'privacyMasked',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerUid',
+        'consentId',
+        'caseTitle',
+        'category',
+        'viewLabel',
+        'dayLabel',
+        'cipherAlgorithm',
+        'ivBase64',
+        'ciphertextBase64',
+        'sha256Digest',
+        'privacyMasked',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+      data.ownerUid == request.auth.uid &&
+      data.consentId is string && data.consentId.size() >= 1 && data.consentId.size() <= 128 &&
+      data.consentId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.caseTitle is string && data.caseTitle.size() >= 1 && data.caseTitle.size() <= 160 &&
+      data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+      data.viewLabel is string && data.viewLabel.size() >= 1 && data.viewLabel.size() <= 64 &&
+      data.dayLabel is string && data.dayLabel.size() >= 1 && data.dayLabel.size() <= 32 &&
+      data.cipherAlgorithm is string && data.cipherAlgorithm == 'AES-256-GCM' &&
+      data.ivBase64 is string && data.ivBase64.size() >= 8 && data.ivBase64.size() <= 64 &&
+      data.ciphertextBase64 is string && data.ciphertextBase64.size() >= 16 && data.ciphertextBase64.size() <= 750000 &&
+      data.sha256Digest is string && data.sha256Digest.size() >= 16 && data.sha256Digest.size() <= 128 &&
+      data.privacyMasked is bool &&
+      data.status is string && data.status in ['encrypted_active', 'flagged_for_review'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: AuthorizedPersonnel
+    function isValidAuthorizedPersonnel(data) {
+      return data.keys().hasAll([
+        'uid',
+        'email',
+        'displayName',
+        'role',
+        'badgeId',
+        'createdByUid',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'email',
+        'displayName',
+        'role',
+        'badgeId',
+        'createdByUid',
+        'createdAt'
+      ]) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+      data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+      data.role is string && data.role in ['triage_clinician', 'security_auditor', 'chief_medical_admin'] &&
+      data.badgeId is string && data.badgeId.size() >= 2 && data.badgeId.size() <= 64 &&
+      data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+      data.createdByUid == request.auth.uid &&
+      data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: SecurityAuditLog
+    function isValidSecurityAuditLog(data) {
+      return data.keys().hasAll([
+        'actorUid',
+        'actionType',
+        'targetResourceId',
+        'details',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'actorUid',
+        'actionType',
+        'targetResourceId',
+        'details',
+        'createdAt'
+      ]) &&
+      data.actorUid is string && data.actorUid.size() >= 1 && data.actorUid.size() <= 128 &&
+      data.actorUid == request.auth.uid &&
+      data.actionType is string && data.actionType in [
+        'CONSENT_GRANTED',
+        'CONSENT_REVOKED',
+        'IMAGE_ENCRYPTED_UPLOAD',
+        'IMAGE_DECRYPTED_VIEW',
+        'IMAGE_PERMANENTLY_DELETED',
+        'VAULT_PURGED',
+        'PERSONNEL_AUTHORIZED'
+      ] &&
+      data.targetResourceId is string && data.targetResourceId.size() >= 1 && data.targetResourceId.size() <= 128 &&
+      data.details is string && data.details.size() >= 1 && data.details.size() <= 300 &&
+      data.createdAt is timestamp;
+    }
+
+    // Collection 1: Explicit Consent Records (/consents/{consentId})
+    match /consents/{consentId} {
+      allow get: if isSignedIn() && isValidId(consentId) && (
+        existing().patientUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().patientUid == request.auth.uid || isChiefAdminEmail()
+      );
+      allow create: if isSignedIn() &&
+        isValidId(consentId) &&
+        consentId == request.auth.uid &&
+        isValidConsentRecord(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isSignedIn() &&
+        isValidId(consentId) &&
+        isValidConsentRecord(incoming()) &&
+        existing().patientUid == request.auth.uid &&
+        incoming().patientUid == existing().patientUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'consentGranted',
+          'allowProcessing',
+          'signatureHash',
+          'policyVersion',
+          'updatedAt'
+        ]);
+      allow delete: if isSignedIn() && isValidId(consentId) && existing().patientUid == request.auth.uid;
+    }
+
+    // Collection 2: Encrypted Patient Images (/encrypted_images/{imageId})
+    match /encrypted_images/{imageId} {
+      allow get: if isSignedIn() && isValidId(imageId) && (
+        existing().ownerUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().ownerUid == request.auth.uid || isChiefAdminEmail()
+      );
+      allow create: if isSignedIn() &&
+        isValidId(imageId) &&
+        isValidEncryptedPatientImage(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/consents/$(incoming().consentId)) &&
+        get(/databases/$(database)/documents/consents/$(incoming().consentId)).data.patientUid == request.auth.uid &&
+        get(/databases/$(database)/documents/consents/$(incoming().consentId)).data.consentGranted == true &&
+        get(/databases/$(database)/documents/consents/$(incoming().consentId)).data.allowProcessing == true;
+      allow update: if isSignedIn() &&
+        isValidId(imageId) &&
+        isValidEncryptedPatientImage(incoming()) &&
+        existing().ownerUid == request.auth.uid &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().consentId == existing().consentId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'caseTitle',
+            'dayLabel',
+            'viewLabel',
+            'status',
+            'updatedAt'
+          ]) ||
+          isAdmin()
+        );
+      allow delete: if isSignedIn() && isValidId(imageId) && (
+        existing().ownerUid == request.auth.uid || isAdmin()
+      );
+    }
+
+    // Collection 3: Authorized Personnel Registry (/authorized_personnel/{personnelId})
+    match /authorized_personnel/{personnelId} {
+      allow get: if isSignedIn() && isValidId(personnelId) && (
+        request.auth.uid == personnelId || isAdmin()
+      );
+      allow list: if isChiefAdminEmail() && existing().createdByUid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        isValidId(personnelId) &&
+        isValidAuthorizedPersonnel(incoming()) &&
+        incoming().createdAt == request.time &&
+        isChiefAdminEmail();
+      allow update: if false;
+      allow delete: if isSignedIn() &&
+        isValidId(personnelId) &&
+        isChiefAdminEmail();
+    }
+
+    // Collection 4: Immutable Security Audit Logs (/security_audit_logs/{logId})
+    match /security_audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (
+        existing().actorUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().actorUid == request.auth.uid || isChiefAdminEmail()
+      );
+      allow create: if isSignedIn() &&
+        isValidId(logId) &&
+        isValidSecurityAuditLog(incoming()) &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

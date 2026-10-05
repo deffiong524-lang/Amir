@@ -1,0 +1,301 @@
+{
+  "entities": {
+    "ConsentRecord": {
+      "title": "ConsentRecord",
+      "description": "Explicit patient consent record required prior to AI image processing and encrypted cloud storage.",
+      "type": "object",
+      "properties": {
+        "patientUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the consenting patient.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "policyVersion": {
+          "type": "string",
+          "description": "Version identifier of the Care Aid Ai Data Handling Policy.",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "consentGranted": {
+          "type": "boolean",
+          "description": "True if explicit consent is active."
+        },
+        "allowProcessing": {
+          "type": "boolean",
+          "description": "True if user explicitly consents to multimodal first-aid image analysis."
+        },
+        "forbidAiTraining": {
+          "type": "boolean",
+          "description": "True confirming patient images must never be used for AI model training."
+        },
+        "acknowledgesNoDiagnosis": {
+          "type": "boolean",
+          "description": "True confirming understanding that image analysis is not a medical diagnosis."
+        },
+        "signatureHash": {
+          "type": "string",
+          "description": "SHA-256 hex digest of the signed consent statement.",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when consent was recorded."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when consent was last updated."
+        }
+      },
+      "required": [
+        "patientUid",
+        "policyVersion",
+        "consentGranted",
+        "allowProcessing",
+        "forbidAiTraining",
+        "acknowledgesNoDiagnosis",
+        "signatureHash",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "EncryptedPatientImage": {
+      "title": "EncryptedPatientImage",
+      "description": "AES-256-GCM encrypted patient image record stored in Firestore with strict RBAC and consent linkage.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the patient who owns this image.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "consentId": {
+          "type": "string",
+          "description": "Document ID of the active ConsentRecord authorizing this image.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "caseTitle": {
+          "type": "string",
+          "description": "Label of the clinical case or body area.",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "category": {
+          "type": "string",
+          "description": "Supported visible condition category.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "viewLabel": {
+          "type": "string",
+          "description": "Camera angle label (Front view, Side view, Close-up, Comparison with an earlier image).",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "dayLabel": {
+          "type": "string",
+          "description": "Timeline progression day marker (e.g. Day 1, Day 3, Day 7).",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "cipherAlgorithm": {
+          "type": "string",
+          "description": "Authenticated encryption cipher suite identifier.",
+          "enum": ["AES-256-GCM"]
+        },
+        "ivBase64": {
+          "type": "string",
+          "description": "Base64-encoded 96-bit initialization vector for AES-GCM.",
+          "minLength": 8,
+          "maxLength": 64
+        },
+        "ciphertextBase64": {
+          "type": "string",
+          "description": "AES-256-GCM encrypted image payload encoded as Base64.",
+          "minLength": 16,
+          "maxLength": 750000
+        },
+        "sha256Digest": {
+          "type": "string",
+          "description": "SHA-256 integrity hash of the encrypted payload.",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "privacyMasked": {
+          "type": "boolean",
+          "description": "True if peripheral identifying features were masked before encryption."
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle status of the encrypted record.",
+          "enum": ["encrypted_active", "flagged_for_review"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when encrypted image was stored."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when record metadata was last updated."
+        }
+      },
+      "required": [
+        "ownerUid",
+        "consentId",
+        "caseTitle",
+        "category",
+        "viewLabel",
+        "dayLabel",
+        "cipherAlgorithm",
+        "ivBase64",
+        "ciphertextBase64",
+        "sha256Digest",
+        "privacyMasked",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AuthorizedPersonnel": {
+      "title": "AuthorizedPersonnel",
+      "description": "Registry of authorized healthcare/security personnel permitted to audit or review escalated records.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the authorized clinician or security officer.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "description": "Verified institutional email address.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full name and credentials of the authorized personnel.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned clinical or security role.",
+          "enum": ["triage_clinician", "security_auditor", "chief_medical_admin"]
+        },
+        "badgeId": {
+          "type": "string",
+          "description": "Clinical license or personnel badge identifier.",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "createdByUid": {
+          "type": "string",
+          "description": "UID of the administrator who authorized this personnel record.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when authorization was granted."
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "role",
+        "badgeId",
+        "createdByUid",
+        "createdAt"
+      ]
+    },
+    "SecurityAuditLog": {
+      "title": "SecurityAuditLog",
+      "description": "Immutable security audit entry recording consent, encryption, access, and permanent deletion events.",
+      "type": "object",
+      "properties": {
+        "actorUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user who triggered the event.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "actionType": {
+          "type": "string",
+          "description": "Security lifecycle action type.",
+          "enum": [
+            "CONSENT_GRANTED",
+            "CONSENT_REVOKED",
+            "IMAGE_ENCRYPTED_UPLOAD",
+            "IMAGE_DECRYPTED_VIEW",
+            "IMAGE_PERMANENTLY_DELETED",
+            "VAULT_PURGED",
+            "PERSONNEL_AUTHORIZED"
+          ]
+        },
+        "targetResourceId": {
+          "type": "string",
+          "description": "ID of the consent or encrypted image record affected.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "details": {
+          "type": "string",
+          "description": "Non-PII cryptographic summary of the security operation.",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the security event."
+        }
+      },
+      "required": [
+        "actorUid",
+        "actionType",
+        "targetResourceId",
+        "details",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/consents/{consentId}": {
+      "schema": {
+        "$ref": "#/entities/ConsentRecord"
+      },
+      "description": "Stores explicit patient consent records keyed by user UID or consent ID."
+    },
+    "/encrypted_images/{imageId}": {
+      "schema": {
+        "$ref": "#/entities/EncryptedPatientImage"
+      },
+      "description": "Stores AES-256-GCM encrypted patient images linked to an active ConsentRecord."
+    },
+    "/authorized_personnel/{personnelId}": {
+      "schema": {
+        "$ref": "#/entities/AuthorizedPersonnel"
+      },
+      "description": "Stores authorized personnel records managed strictly by administrators."
+    },
+    "/security_audit_logs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/SecurityAuditLog"
+      },
+      "description": "Append-only immutable security audit trail."
+    }
+  }
+}
